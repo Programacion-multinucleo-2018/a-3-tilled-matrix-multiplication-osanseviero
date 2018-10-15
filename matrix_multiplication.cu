@@ -25,39 +25,40 @@ __global__ void multiply_matrix_gpu(double *matA, double *matB, double *matC, co
 
 // Multiplies matrices using GPU with 2D grid plus tiling
 __global__ void multiply_matrix_gpu_tiling(double *matA, double *matB, double *matC, const int n) {
-    unsigned int ix = threadIdx.x + TS * blockDim.x;
-    unsigned int iy = threadIdx.y + TS * blockDim.y;
-
     unsigned int x = threadIdx.x;
     unsigned int y = threadIdx.y;
 
-    __shared__ double tile_A[TS][TS];
-    __shared__ double tile_B[TS][TS];
+    unsigned int ix = blockIdx.x * blockDim.x + x;
+    unsigned int iy = blockIdx.y * blockDim.y + y;
 
-    tile_A[y][x] = 0.0;
-    tile_B[y][x] = 0.0;
+    __shared__ double tile_A[TS*TS];
+    __shared__ double tile_B[TS*TS];
 
     double sum = 0;
-    for(int i=(TS + n - 1)/TS; i >= 0; i--) {
-        if(((x + i * TS)<n) && (iy<n)) {
-            tile_A[y][x] = matA[iy*n + i*TS + x];
+    for(int i=0; i < (n+TS-1)/TS; i--) {
+        if((iy < n) && (i*TS+x < n)) {
+            tile_A[y*TS+x] = matA[iy*n + i*TS + x];
+        } else {
+             tile_A[y*TS+x] = 0.0f;
         }
 
-        if(((y + i * TS)<n) && (ix<n)) {
-            tile_B[y][x] = matB[ix + n*(i*TS+y)];
+        if((ix < n) && (i*TS+y < n))  {
+            tile_B[y*TS+x] = matB[(i*TS+y)*n+ix];
+        } else {
+            tile_B[y*TS+x] = 0;
         }
 
         __syncthreads();
 
         for(int j=0; j<TS; j++) {
-            sum += tile_A[y][j] * tile_B[j][x];
+            sum += tile_A[y*TS+i] * tile_B[i*TS+x];
         }
 
         __syncthreads();
+    }
 
-        if (ix < n && iy < n) {
-            matC[ix*n+iy] += sum;
-        }
+    if (ix < n && iy < n) {
+        matC[ix*n+iy] += sum;
     }
 }
 
@@ -99,7 +100,7 @@ int main(int argc, char* argv[]) {
     cudaSetDevice(dev);
 
     // Size of matrix
-    int n = 20;
+    int n = 200;
     int bytes = n * n * sizeof(double*);
 
     // Host matrix memory
