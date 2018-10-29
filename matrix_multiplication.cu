@@ -100,7 +100,7 @@ int main(int argc, char* argv[]) {
     cudaSetDevice(dev);
 
     // Size of matrix
-    int n = 200;
+    int n = 1000;
     int bytes = n * n * sizeof(double*);
 
     // Host matrix memory
